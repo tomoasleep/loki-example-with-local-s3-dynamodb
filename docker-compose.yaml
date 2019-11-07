@@ -1,0 +1,70 @@
+version: "3"
+
+services:
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - loki
+    volumes:
+      - ./loki.yaml:/etc/loki/local-config.yaml
+    depends_on:
+      - dynamodb-local
+      - s3-local
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - /var/log:/var/log
+    command: -config.file=/etc/promtail/docker-config.yaml
+    networks:
+      - loki
+
+  grafana:
+    image: grafana/grafana:master
+    ports:
+      - "3000:3000"
+    networks:
+      - loki
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+
+  s3-local:
+    image: adobe/s3mock
+    ports:
+      - "9090:9090"
+    networks:
+      loki:
+        aliases:
+          - s3.local
+    environment:
+      initialBuckets: chunks
+
+  dynamodb-local:
+    image: amazon/dynamodb-local
+    command: ['-jar', 'DynamoDBLocal.jar', '-inMemory', '-sharedDb']
+    ports:
+      - "8000:8000"
+    networks:
+      loki:
+        aliases:
+          - dynamodb.local
+
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    command: ["node", "bin/dynamodb-admin.js", "-p", "7777"]
+    environment:
+      DYNAMO_ENDPOINT: http://dynamodb.local:8000
+    ports:
+      - "7777:7777"
+    networks:
+      - loki
+    
+networks:
+  loki:
+
